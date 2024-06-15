@@ -87,7 +87,7 @@ def get_comments(movie_id: str) -> list[str]:
 if __name__ == "__main__":
     movies_to_fetch = []
 
-    dataframe = pd.read_csv("dataset/the_oscar_award.csv")
+    dataframe = pd.read_csv(r"C:\Users\Ruindowns\Documents\python\Trabalho pinho A2\raspagem-imdb\dataset\the_oscar_award.csv")
     filtered = dataframe[dataframe["category"] == "WRITING (Original Story)"]
     movies_to_fetch = filtered["film"].tolist()
 
