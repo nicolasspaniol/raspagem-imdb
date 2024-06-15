@@ -34,7 +34,7 @@ def resumir(str):
 #Limpeza de dados
 
 ## IMPORTA OS DADOS
-dfdirty = pd.read_csv(r"Trabalho pinho A2\raspagem-imdb\dataset\output.csv")
+dfdirty = pd.read_csv(r"raspagem-imdb\dataset\output.csv")
 
 ## LIMPA OS DADOS
 # String
@@ -58,4 +58,4 @@ dfclean['comment'] = dfclean['comment'].apply(resumir)
 ######################################################################
 
 ## Salva os dados em um arquivo .csv
-dfclean.to_csv(r"Trabalho pinho A2\raspagem-imdb\dataset\reviews_limpos.csv", index=False)
+dfclean.to_csv(r"raspagem-imdb\dataset\reviews_limpos.csv", index=False)
