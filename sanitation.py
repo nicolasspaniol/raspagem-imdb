@@ -31,7 +31,7 @@ dfdirty = pd.read_csv(r"raspagem-imdb\dataset\output.csv")
 
 ## LIMPA OS DADOS
 # Elimina linhas imcompletas, sem nota.
-dfdirty['rating'] = dfdirty.drop(dfdirty[dfdirty['rating'] == False].index)
+dfdirty.dropna(subset=['rating'], inplace=True)
 
 # String
 dfclean = dfdirty.copy()
