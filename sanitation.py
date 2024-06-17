@@ -23,13 +23,6 @@ def limparstr(string, type):
 
     return str_limpa.strip()
 
-# Resume grotescamente a string para questoes de teste
-def resumir(str):
-    if str:
-        return str[:100]
-    else:
-        return "NaN"
-    
 ######################################################################
 #Limpeza de dados
 
@@ -37,6 +30,9 @@ def resumir(str):
 dfdirty = pd.read_csv(r"raspagem-imdb\dataset\output.csv")
 
 ## LIMPA OS DADOS
+# Elimina linhas imcompletas, sem nota.
+dfdirty['rating'] = dfdirty.drop(dfdirty[dfdirty['rating'] == False].index)
+
 # String
 dfclean = dfdirty.copy()
 dfclean['title'] = dfdirty['title'].apply(limparstr, type=1)
@@ -48,12 +44,8 @@ dfclean['rating'] = dfdirty['rating'].apply(limparstr, type=0)
 dfclean['helpful_count'] = dfdirty['helpful_count'].apply(limparstr, type=0)
 dfclean['helpful_total'] = dfdirty['helpful_total'].apply(limparstr, type=0)
 
-
 ## ELIMINA LINHAS DUPLICADAS
 dfclean = dfclean.drop_duplicates()
-
-## RESUME OS COMENTARIOS grostescamente
-dfclean['comment'] = dfclean['comment'].apply(resumir)
 
 ######################################################################
 
