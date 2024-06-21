@@ -6,72 +6,132 @@ import requests
 import json
 import urllib
 import pandas as pd
+from enum import Enum
 
 
-def find_id(movie_title: str) -> str:
+class ReviewSorting(Enum):
+    FEATURED = "curated"
+    REVIEW_DATE = "submissionDate"
+    TOTAL_VOTES = "totalVotes"
+    PROFILIC_REVIEWER = "reviewVolume"
+    REVIEW_RATING = "userRating"
+
+
+class SortingDirection(Enum):
+    ASCENDING = "asc"
+    DESCENDING = "desc"
+
+
+def find_id(movie_title: str, year: int) -> str:
     """
-    Encontra o ID do filme por meio das sugestões retornadas na busca pelo
-    título
+    Procura o ID do filme a partir das sugestões retornadas pelo IMDb quando
+    se pesquisa pelo nome do filme. Caso não encontre, retorna `None`
     """
 
+    # Higieniza o nome do filme para passá-lo como parâmetro:
+    # "Nome do filme" => "Nome%20do%20filme"
     encoded_title = urllib.parse.quote(movie_title)
+
     url = f"https://v3.sg.media-imdb.com/suggestion/x/{encoded_title}.json?includeVideos=0"
-    
     response = json.loads(requests.get(url).content)
-    return response["d"][0]["id"]
+    suggestions = response["d"]
+
+    for suggestion in suggestions:
+        # Verifica se a sugestão é um tipo de filme. As sugestões podem
+        # incluir atores, séries, etc. e mesmo os filmes podem ter
+        # categorias diferentes, portanto é necessário e suficiente garantir
+        # que "movie" esteja no tipo da sugestão
+        is_movie = "qid" in suggestion and "movie" in suggestion["qid"]
+
+        # Verifica se o nome bate, supondo que `movie_title` esteja escrito
+        # corretamente e em inglês
+        title_matches = suggestion["l"].lower() == movie_title.lower()
+
+        # Calcula a diferença entre o ano (de lançamento do filme) exibido
+        # no IMDb e contido no dataset. Idealmente eles deveriam ser iguais,
+        # mas dependendo do que cada site considera o ano de lançamento,
+        # pode haver uma diferença de um ano entre os dois
+        year_error = 0 if not "y" in suggestion else suggestion["y"] - year
+
+        # A partir das condições a seguir, podemos concluir que a sugestão se
+        # refere ao filme correto
+        if title_matches and -1 <= year_error <= 1 and is_movie:
+            return suggestion["id"]
+
+    return None
 
 
-def get_comments(movie_id: str) -> list[str]:
+def get_reviews(movie_id: str, count: int, sorting: ReviewSorting, direction: SortingDirection) -> list[str]:
     """
-    Faz a raspagens dos primeiros 25 comentários de um filme, ordenados pelo
-    número de votos
+    Faz a raspagens das primeiras `count` reviews, caso existam, do filme
+    com o `id` dado, na ordem passada como parâmetro
     """
 
-    url = f"https://www.imdb.com/title/{movie_id}/reviews?sort=totalVotes&dir=desc&ratingFilter=0"
-    page = requests.get(url)
-    soup = BeautifulSoup(page.text, "lxml")
+    assert isinstance(sorting, ReviewSorting)
+    assert isinstance(direction, SortingDirection)
 
-    review_list = soup.find("div", {"class": "lister"})
-    if review_list == None:
-        print("Filme não encontrado!")
-        return []
+    url = f"https://www.imdb.com/title/{movie_id}/reviews?sort={sorting}&dir={direction}&ratingFilter=0"
+    response = requests.get(url)
+    soup = BeautifulSoup(response.text, "lxml")
+
+    review_list = soup.select("div.lister-list div.review-container")
+    assert review_list != None
     
-    reviews = review_list.find_all("div", {"class": "review-container"})
+    while len(review_list) < count:
+        # Emula o request que seria feito caso o usuário apertasse o botão
+        # "Load More" na página de reviews
 
-    results = []
+        load_more_button = soup.select_one("div.load-more-data")
 
-    for review in reviews:
+        if load_more_button == None or not "data-key" in load_more_button:
+             # Provavelmente acabaram as reviews
+             count = len(review_list)
+             break
+
+        page = load_more_button["data-ajaxurl"]
+        pagination_key = load_more_button["data-key"]
+        page_response = requests.get(f"https://www.imdb.com{page}&paginationKey={pagination_key}")
+
+        inner_soup = BeautifulSoup(page_response.text, "lxml")
+        review_list.extend(inner_soup.select("div.lister-list div.review-container"))
+
+    output = []
+
+    for i in range(count):
+        review = review_list[i]
+
         # O primeiro <span> dentro do <span class="rating-..."> é
-        # A nota dada pelo usuário, de 0 a 10 (opcional)
-        rating_span = review.find("span", {"class": "rating-other-user-rating"})
+        # a nota dada pelo usuário, de 0 a 10 (opcional)
+        rating_span = review.select_one("span.rating-other-user-rating")
         rating = None if rating_span == None else int(rating_span.find("span").text)
 
         # O comentário é obrigatório
-        comment_div = review.find("div", {"class": "content"})
-        comment = comment_div.find("div", {"class": "text"}).text
+        comment = review.select_one("div.content > div.text").text
         
         # Quebras de linhas são substituídas por ";", o que não deve afetar
         # a interpretação dos dados
         comment = comment.replace("\r", "").replace("\n", ";")
 
         # O título é obrigatório
-        title = review.find("a", {"class": "title"}).text.strip(" \n")
+        title = review.select_one("a.title").text.strip(" \n")
 
-        # Não necessariamente vão haver votos na review
-        helpful_message = review.find("div", {"class": "actions"})
-        if helpful_message != None:
+        # Pega uma frase do tipo "10 of 15 found this helpful" e
+        # extrai os números como inteiros
+        helpful_message = review.select_one("div.actions")
+        if helpful_message != None: 
             pattern = r"\s*([0-9,]+) out of ([0-9,]+) [\s\S]+"
-            msg = helpful_message.text
-            count, total = re.match(pattern, msg).groups()
+            count, total = re.match(pattern, helpful_message.text).groups()
+            # Remove as vírgulas dos milhares ("2,024")
             helpful_count = int(count.replace(",", ""))
             helpful_total = int(total.replace(",", ""))
         else:
             helpful_count = None
             helpful_total = None
 
-        has_spoiler = review.find("span", {"class": "spoiler-warning"}) != None
+        # A presença dessa div indica que há spoilers na review
+        has_spoiler = review.select_one("span.spoiler-warning") != None
 
-        results.append({
+        output.append({
             "movie_id": movie_id,
             "title": title,
             "comment": comment,
@@ -81,15 +141,14 @@ def get_comments(movie_id: str) -> list[str]:
             "has_spoiler": has_spoiler
         })
 
-    return results
+    return output
 
 
 if __name__ == "__main__":
-    movies_to_fetch = []
-
     dataframe = pd.read_csv(r"dataset/the_oscar_award.csv")
     filtered = dataframe[dataframe["category"] == "WRITING (Original Story)"]
     movies_to_fetch = filtered["film"].tolist()
+    years = filtered["year_film"].tolist()
 
     review_columns = [
         "movie_id", "title", "rating", "comment",
@@ -103,15 +162,21 @@ if __name__ == "__main__":
     print(f"{len(movies_to_fetch)} filmes encontrados\n----------")
 
     for i, movie in enumerate(movies_to_fetch):
-        id = find_id(movie)
-        movie_list.append({ "movie_id": id, "movie_title": movie })
+        year = years[i]
+        id = find_id(movie, year)
 
         print(str(i + 1).ljust(5, " "), end = "")
+
+        if id == None:
+            print(f"ID de \"{movie}\" não encontrado")
+            continue
+
         print(f"Raspando reviews de \"{movie}\" ({id})...")
 
-        review_list.extend(get_comments(id))
+        movie_list.append({ "movie_id": id, "movie_title": movie })
+        review_list.extend(get_reviews(id, 25, ReviewSorting.TOTAL_VOTES, SortingDirection.DESCENDING))
 
-    print()
+    print() # Linha em branco
 
     reviews = pd.DataFrame(review_list, columns = review_columns)
     reviews.to_csv("reviews.csv", index = False)
