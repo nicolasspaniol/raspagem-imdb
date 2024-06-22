@@ -1,15 +1,23 @@
 from openai import OpenAI
 import pandas as pd
 import json
+from math import floor
+
+
+# Carrega a prompt do sistema em uma variável global
+with open("system_prompt.txt") as f:
+    global SYSTEM_PROMPT
+    SYSTEM_PROMPT = f.read()
 
 
 # A função abaixo só serve pra controlar o formato da resposta do GPT e
 # não executa nenhuma ação
 def register_emotions(emotion_0, emotion_1, emotion_2):
-    """ Registers the two main emotions displayed in the review, in order of prevalence """
+    """ Registra as três principais emoções identificadas no filme """
     pass
 
 
+# Emoções extraídas de https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8402961/
 emotions = [
     "joy", "pensiveness", "ecstasy", "acceptance", "sadness", "fear", "interest", "rage", "admiration",
     "amazement", "anger", "vigilance" "boredom", "annoyance", "submission", "serenity", "apprehension",
@@ -35,36 +43,39 @@ tools =[{
     }
 }]
 
+
 if __name__ == "__main__":
-    # while True:
-    #     KEY = input("Digite sua chave da api da OpenAI: \n")
-    #     if KEY:
-    #         break
-
-    KEY = ""
-
-    client = OpenAI(api_key = KEY)
+    # Chave lida como variável de ambiente (por enquanto)
+    client = OpenAI()
     
     reviews_df = pd.read_csv(r"reviews.csv")
+    movies_df = pd.read_csv(r"movies.csv")
 
-    ids, ratings, emotions_0, emotions_1, emotions_2 = [], [], [], [], []
+    output = []
 
-    for row in reviews_df.itertuples():
-        id = row.movie_id
-        comment = row.comment
-        rating = row.rating
+    total = reviews_df.shape[0]
+    percentage = -1
+    for i, row in enumerate(reviews_df.itertuples()):
+        if floor(100 * i / total) != percentage:
+            percentage = floor(100 * i / total)
+            print(f"[{"=" * percentage}{" " * (100 - percentage)}] ({percentage}%)", end="\r")
 
-        ids.append(id)
-        ratings.append(rating)
+        # https://stackoverflow.com/a/17071908
+        movie = movies_df.query(f"movie_id == '{row.movie_id}'").values[0]
+
+        # Incluí o nome do filme pra ajudar o GPT a entender a review
+        user_message = f"MOVIE NAME: \"{movie[0]}\"\n" + \
+                       f"REVIEW TITLE: \"{row.title}\"\n" + \
+                       f"REVIEW BODY: \n{row.comment}"
 
         messages = [
             {
                 "role": "system",
-                "content": "Given a movie review, your job is to identify and register the THREE MAIN EMOTIONS displayed in the text, in order of prevalence. Here goes the review: "
+                "content": SYSTEM_PROMPT
             },
             {
                 "role": "user",
-                "content": "REVIEW: " + comment
+                "content": user_message
             }
         ]
 
@@ -72,32 +83,19 @@ if __name__ == "__main__":
             model = "gpt-3.5-turbo-0125",
             messages = messages,
             tools = tools,
-            tool_choice = "required" # <- Importante deixar `required` aqui
+            tool_choice = "required" # Força a função a ser chamada
         ).choices[0].message
 
         tool_call = response.tool_calls[0]
         args = json.loads(tool_call.function.arguments)
-        emotions = [
-            args.get("emotion_0"),
-            args.get("emotion_1"),
-            args.get("emotion_2")
-        ]
 
-        if len(emotions) != 3:
-            print(f"saíram {len(emotions)} emoções")
-
-        emotions_0.append(emotions[0])
-        emotions_1.append(emotions[1])
-        emotions_2.append(emotions[2])
+        output.append({
+            "movie_id": row.movie_id,
+            "rating": row.rating,
+            "emotion_0": args.get("emotion_0"),
+            "emotion_1": args.get("emotion_1"),
+            "emotion_2": args.get("emotion_2")
+        })
     
-    emotions_df = {
-        "movie_id": ids,
-        "rating": ratings,
-        "emotion_0": emotions_0,
-        "emotion_1": emotions_1,
-        "emotion_2": emotions_2
-    }
-
-    df = pd.DataFrame(emotions_df)
-
-    df.to_csv("emotions.csv", index=False)
+    emotions_df = pd.DataFrame(output)
+    emotions_df.to_csv("emotions.csv", index=False)

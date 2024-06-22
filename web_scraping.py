@@ -147,41 +147,39 @@ def get_reviews(movie_id: str, count: int, sorting: ReviewSorting, direction: So
 if __name__ == "__main__":
     dataframe = pd.read_csv(r"dataset/the_oscar_award.csv")
     filtered = dataframe[dataframe["category"] == "WRITING (Original Story)"]
-    movies_to_fetch = filtered["film"].tolist()
-    years = filtered["year_film"].tolist()
 
-    review_columns = [
-        "movie_id", "title", "rating", "comment",
-        "helpful_count", "helpful_total", "has_spoiler"
-    ]
     review_list = []
-
-    movie_columns = ["movie_id", "movie_title"]
     movie_list = []
 
-    print(f"{len(movies_to_fetch)} filmes encontrados\n----------")
+    # https://stackoverflow.com/a/15943975
+    print(f"{filtered.shape[0]} filmes encontrados\n----------")
 
-    for i, movie in enumerate(movies_to_fetch):
-        year = years[i]
-        id = find_id(movie, year)
+    for i, row in enumerate(filtered.itertuples()):
+        year = row.year_film
+        id = find_id(row.film, year)
 
         print(str(i + 1).ljust(5, " "), end = "")
 
         if id == None:
-            print(f"ID de \"{movie}\" não encontrado")
+            print(f"ID de \"{row.film}\" não encontrado")
             continue
 
-        print(f"Raspando reviews de \"{movie}\" ({id})...")
+        print(f"Raspando reviews de \"{row.film}\" ({id})...")
 
-        movie_list.append({ "movie_id": id, "movie_title": movie })
+        movie_list.append({
+            "movie_id": id,
+            "movie_title": row.film,
+            "oscar_category": row.category,
+            "oscar_winner": row.winner
+        })
         review_list.extend(get_reviews(id, 25, ReviewSorting.TOTAL_VOTES, SortingDirection.DESCENDING))
 
     print() # Linha em branco
 
-    reviews = pd.DataFrame(review_list, columns = review_columns)
+    reviews = pd.DataFrame(review_list)
     reviews.to_csv("reviews.csv", index = False)
     print("Gerado arquivo \"reviews.csv\"")
 
-    movies = pd.DataFrame(movie_list, columns = movie_columns)
+    movies = pd.DataFrame(movie_list)
     movies.to_csv("movies.csv", index = False)
     print("Gerado arquivo \"movies.csv\"")
