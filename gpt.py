@@ -1,3 +1,5 @@
+""" Módulo que passa os dados ao ChatGPT e extrai as emoções dos comentários """
+
 from openai import OpenAI
 import pandas as pd
 import json
