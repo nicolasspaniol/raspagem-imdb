@@ -1,53 +1,42 @@
-from unidecode import unidecode
+
+""" Módulo responsável pela higienização dos dados extraidos no scraping """
+
 import pandas as pd
 import re
 
-######################################################################
-# Funçoes
-
-# Limpar os imputs, em dois casos, string e numerico
-def limparstr(string, type):
-    if type:
-        ## CASO STRING
-        # Remove caracteres indesejados
-        str_limpa = re.sub(r'[^\w\s.,?!:;()"\'\s-]', '', str(string))
-        # Complia uma expressoes, que identifica caracteres iguais em sequencia
-        expression = re.compile(r'(.)\1{2,}')
-        # Aplica a expressão
-        str_limpa = expression.sub(r'\1', str(string))
-        # Remove acentuaçoes
-        str_limpa = unidecode(str_limpa)
-    else:
-        ## CASO NUMERICO
-        str_limpa = re.sub(r'[^0-9.]', '', str(string))
-
+def limparstr(string):
+    """
+    Limpa a string, excluindo caracteres repetidos
+    """
+    # Complia uma expressoes, que identifica caracteres iguais em sequencia
+    expression = re.compile(r'(.)\1{2,}')
+    # Aplica a expressão
+    str_limpa = expression.sub(r'\1', str(string))
     return str_limpa.strip()
 
-######################################################################
-#Limpeza de dados
+def limpanum(num):
+    """
+    Limpa as strings numericas, garantindo que contenham apenas números
+    """
+    str_limpa = re.sub(r'[^0-9.]', '', str(num))
+    return strlimpa
 
-## IMPORTA OS DADOS
-dfdirty = pd.read_csv(r"raspagem-imdb\dataset\output.csv")
+## Importa os dados
+dfdirty = pd.read_csv(r"reviews.csv")
 
-## LIMPA OS DADOS
-# Elimina linhas imcompletas, sem nota.
-dfdirty.dropna(subset=['rating'], inplace=True)
-
-# String
+# Utiliza a função limpastr para limpar os campos de texto da base de dados
 dfclean = dfdirty.copy()
-dfclean['title'] = dfdirty['title'].apply(limparstr, type=1)
-dfclean['comment'] = dfdirty['comment'].apply(limparstr, type=1)
-dfclean['has_spoiler'] = dfdirty['has_spoiler'].apply(limparstr, type=1)
+dfclean['title'] = dfdirty['title'].apply(limparstr)
+dfclean['comment'] = dfdirty['comment'].apply(limparstr)
+dfclean['has_spoiler'] = dfdirty['has_spoiler'].apply(limparstr)
 
-# Numerico
-dfclean['rating'] = dfdirty['rating'].apply(limparstr, type=0)
-dfclean['helpful_count'] = dfdirty['helpful_count'].apply(limparstr, type=0)
-dfclean['helpful_total'] = dfdirty['helpful_total'].apply(limparstr, type=0)
+# Utiliza a função limpanum para limpar os campos numéricos da base de dados
+dfclean['rating'] = dfdirty['rating'].apply(limpanum)
+dfclean['helpful_count'] = dfdirty['helpful_count'].apply(limpanum)
+dfclean['helpful_total'] = dfdirty['helpful_total'].apply(limpanum)
 
-## ELIMINA LINHAS DUPLICADAS
+## Garante que não haja linhas duplicadas
 dfclean = dfclean.drop_duplicates()
 
-######################################################################
-
 ## Salva os dados em um arquivo .csv
-dfclean.to_csv(r"raspagem-imdb\dataset\reviews_limpos.csv", index=False)
+dfclean.to_csv(r"reviews_limpos.csv", index=False)
