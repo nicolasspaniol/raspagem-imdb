@@ -47,8 +47,7 @@ tools =[{
 
 
 if __name__ == "__main__":
-    # Chave lida como variável de ambiente (por enquanto)
-    client = OpenAI()
+    client = OpenAI(api_key=input("Chave da OpenAI: "))
     
     reviews_df = pd.read_csv(r"reviews.csv")
     movies_df = pd.read_csv(r"movies.csv")
